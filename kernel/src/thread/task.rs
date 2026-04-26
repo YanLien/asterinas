@@ -44,6 +44,12 @@ pub fn create_new_user_task(
             user_mode.context().stack_pointer(),
             user_mode.context().syscall_ret(),
         );
+        println!(
+            "[user-debug] task entry rip={:#x}, rsp={:#x}, rax={:#x}",
+            user_mode.context().instruction_pointer(),
+            user_mode.context().stack_pointer(),
+            user_mode.context().syscall_ret(),
+        );
 
         // The `clone` syscall may require the child process to write its thread TID to the
         // specified address. Make sure that the store operation completes before we return control
@@ -67,7 +73,11 @@ pub fn create_new_user_task(
 
         // The startup method is only executed when the first user thread starts up.
         if ctx.posix_thread.tid() == FIRST_POSIX_TID {
+            crate::hvisor_debug_marker(0x3c);
+            println!("[init-debug] first user task entered kernel startup hook");
             crate::init::on_first_process_startup(&ctx);
+            crate::hvisor_debug_marker(0x3d);
+            println!("[init-debug] first user task startup hook returned");
         }
 
         while !current_thread.is_exited() {
@@ -82,6 +92,13 @@ pub fn create_new_user_task(
             match return_reason {
                 ReturnReason::UserException => {
                     let exception = user_ctx.take_exception().unwrap();
+                    println!(
+                        "[user-debug] exception before handling: rip={:#x}, rsp={:#x}, rax={:#x}, exception={:#x?}",
+                        user_ctx.instruction_pointer(),
+                        user_ctx.stack_pointer(),
+                        user_ctx.syscall_ret(),
+                        exception,
+                    );
                     handle_exception(&ctx, user_ctx, exception)
                 }
                 ReturnReason::UserSyscall => {

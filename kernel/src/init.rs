@@ -16,29 +16,38 @@ use crate::{
 };
 
 pub(super) fn main() {
+    crate::hvisor_debug_marker(0xb1);
     // Initialize the global states for all CPUs.
     ostd::early_println!("OSTD initialized. Preparing components.");
     component::init_all(InitStage::Bootstrap, component::parse_metadata!()).unwrap();
+    crate::hvisor_debug_marker(0xb2);
     init();
+    crate::hvisor_debug_marker(0xb3);
 
     // Initialize the per-CPU states for BSP.
     init_on_each_cpu();
+    crate::hvisor_debug_marker(0xb4);
 
     // Enable APs.
     ostd::boot::smp::register_ap_entry(ap_init);
+    crate::hvisor_debug_marker(0xb5);
 
     // Give the control of the BSP to the idle thread.
     ThreadOptions::new(bsp_idle_loop)
         .cpu_affinity(CpuId::bsp().into())
         .sched_policy(SchedPolicy::Idle)
         .spawn();
+    crate::hvisor_debug_marker(0xb6);
 }
 
 fn init() {
+    crate::hvisor_debug_marker(0xc0);
     crate::arch::init();
+    crate::hvisor_debug_marker(0xc1);
     crate::thread::init();
     crate::util::random::init();
     crate::driver::init();
+    crate::hvisor_debug_marker(0xc2);
     crate::time::init();
     crate::net::init();
     crate::sched::init();
@@ -136,13 +145,22 @@ fn first_kthread() {
     init_in_first_kthread(&fs_resolver);
 
     print_banner();
+    crate::hvisor_debug_marker(0x30);
+    println!("[init-debug] after banner, preparing init process");
 
     INIT_PROCESS.call_once(|| {
+        crate::hvisor_debug_marker(0x31);
         let karg = INIT_PROC_ARGS.get().unwrap();
+        crate::hvisor_debug_marker(0x32);
+        println!("[init-debug] init args ready");
         let init_path = INIT_PATH.get().map(|s| s.as_str());
+        crate::hvisor_debug_marker(0x33);
+        println!("[init-debug] init path = {:?}", init_path);
         spawn_init_process(init_path, karg.argv().to_vec(), karg.envp().to_vec())
             .expect("Failed to run the init process")
     });
+    crate::hvisor_debug_marker(0x34);
+    println!("[init-debug] init process spawned");
 }
 
 static INIT_PROCESS: Once<Arc<Process>> = Once::new();
@@ -165,9 +183,19 @@ fn print_banner() {
 }
 
 pub(super) fn on_first_process_startup(ctx: &Context) {
+    crate::hvisor_debug_marker(0x38);
+    println!("[init-debug] first process startup begin");
+    crate::hvisor_debug_marker(0x40);
+    println!("[init-debug] process-stage init_all begin");
     component::init_all(InitStage::Process, component::parse_metadata!()).unwrap();
+    crate::hvisor_debug_marker(0x39);
+    println!("[init-debug] process-stage components initialized");
     crate::device::init_in_first_process(ctx).unwrap();
+    crate::hvisor_debug_marker(0x3a);
+    println!("[init-debug] first-process devices initialized");
     crate::fs::init_in_first_process(ctx);
+    crate::hvisor_debug_marker(0x3b);
+    println!("[init-debug] first process startup done");
 }
 
 static INIT_PATH: Once<String> = Once::new();

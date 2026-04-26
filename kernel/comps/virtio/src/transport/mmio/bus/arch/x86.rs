@@ -26,10 +26,16 @@ pub(super) fn probe_for_device() {
     const QEMU_IOAPIC2_NUM_TRANS: u32 = 24;
 
     let irq_chip = IRQ_CHIP.get().unwrap();
-    let (gsi_base, num_trans) = match irq_chip.count_io_apics() {
+    let io_apic_count = irq_chip.count_io_apics();
+    ostd::early_println!(
+        "[virtio-debug] x86 probe_for_device: io_apic_count={}",
+        io_apic_count
+    );
+    let (gsi_base, num_trans) = match io_apic_count {
         1 => (QEMU_IOAPIC1_GSI_BASE, QEMU_IOAPIC1_NUM_TRANS),
         2.. => (QEMU_IOAPIC2_GSI_BASE, QEMU_IOAPIC2_NUM_TRANS),
         0 => {
+            ostd::early_println!("[virtio-debug] skip mmio detection: no IOAPIC");
             debug!("Skip MMIO detection because there are no I/O APICs");
             return;
         }
@@ -37,6 +43,12 @@ pub(super) fn probe_for_device() {
 
     for index in 0..num_trans {
         let mmio_base = QEMU_MMIO_BASE + (index as usize) * QEMU_MMIO_SIZE;
+        ostd::early_println!(
+            "[virtio-debug] x86 scan index={}, base={:#x}, gsi={}",
+            index,
+            mmio_base,
+            gsi_base + index
+        );
         match super::try_register_mmio_device(mmio_base..(mmio_base + QEMU_MMIO_SIZE), |irq_line| {
             irq_chip.map_gsi_pin_to(irq_line, gsi_base + index)
         }) {

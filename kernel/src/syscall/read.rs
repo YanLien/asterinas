@@ -41,5 +41,11 @@ pub fn sys_read(
     if read_len > 0 {
         fs::vfs::notify::on_access(&file);
     }
+    ostd::info!(
+        "[syscall-debug] read fd={} requested={} ret={}",
+        raw_fd,
+        buf_len,
+        read_len
+    );
     Ok(SyscallReturn::Return(read_len as _))
 }

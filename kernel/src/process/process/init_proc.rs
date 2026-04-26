@@ -29,6 +29,11 @@ pub fn spawn_init_process(
     argv: Vec<CString>,
     envp: Vec<CString>,
 ) -> Result<Arc<Process>> {
+    crate::hvisor_debug_marker(0x35);
+    println!(
+        "[init-debug] spawn_init_process begin, executable_path = {:?}",
+        executable_path
+    );
     let process = if let Some(executable_path) = executable_path {
         create_init_process(
             executable_path,
@@ -38,6 +43,8 @@ pub fn spawn_init_process(
     } else {
         create_default_init_process(argv, envp)?
     };
+    crate::hvisor_debug_marker(0x36);
+    println!("[init-debug] init process object created");
 
     // Linux starts the init process without placing it in a process group or session.
     // It joins one only after userspace first calls `setsid()`.
@@ -49,6 +56,8 @@ pub fn spawn_init_process(
     set_bootstrap_session_and_group(&process);
 
     process.run();
+    crate::hvisor_debug_marker(0x37);
+    println!("[init-debug] process.run returned");
 
     Ok(process)
 }
@@ -87,12 +96,14 @@ fn create_init_process(
     argv: Vec<CString>,
     envp: Vec<CString>,
 ) -> Result<Arc<Process>> {
+    println!("[init-debug] create_init_process path = {}", executable_path);
     let fs = {
         let fs_resolver = MountNamespace::get_init_singleton().new_path_resolver();
         ThreadFsInfo::new(fs_resolver)
     };
     let fs_path = FsPath::try_from(executable_path)?;
     let elf_path = fs.resolver().read().lookup(&fs_path)?;
+    println!("[init-debug] init ELF path resolved");
 
     let pid = allocate_posix_tid();
     let vmar = Vmar::new(ProcessVm::new(elf_path.clone()));
@@ -113,6 +124,7 @@ fn create_init_process(
     );
 
     let init_task = create_init_task(pid, &init_proc, fs, elf_path, argv, envp)?;
+    println!("[init-debug] init task created");
     init_proc.tasks().lock().insert(init_task).unwrap();
 
     Ok(init_proc)
@@ -141,6 +153,7 @@ fn create_init_task(
     argv: Vec<CString>,
     envp: Vec<CString>,
 ) -> Result<Arc<Task>> {
+    println!("[init-debug] create_init_task begin");
     let credentials = Credentials::new_root();
 
     let (elf_load_info, elf_abs_path) = {
@@ -148,8 +161,13 @@ fn create_init_task(
 
         let program_to_load =
             ProgramToLoad::build_from_file(elf_path.clone(), &path_resolver, argv, envp)?;
+        println!("[init-debug] init program loaded from file");
         let vmar = process.lock_vmar();
         let elf_load_info = program_to_load.load_to_vmar(vmar.unwrap(), &path_resolver)?;
+        println!(
+            "[init-debug] init ELF mapped, entry={:#x}, stack={:#x}",
+            elf_load_info.entry_point, elf_load_info.user_stack_top
+        );
         let elf_abs_path = path_resolver.make_abs_path(&elf_path).into_string();
 
         (elf_load_info, elf_abs_path)

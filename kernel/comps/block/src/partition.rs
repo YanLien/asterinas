@@ -148,12 +148,20 @@ impl GptEntry {
 }
 
 pub(super) fn parse(device: &Arc<dyn BlockDevice>) -> Option<Vec<Option<PartitionInfo>>> {
+    ostd::early_println!("[block-debug] partition parse: read MBR begin");
     let mbr = device.read_val::<MbrHeader>(0).unwrap();
+    ostd::early_println!(
+        "[block-debug] partition parse: MBR read done, signature_ok={}, first_type=0x{:x}",
+        mbr.check_signature(),
+        mbr.entries[0].type_,
+    );
 
     // 0xEE indicates a GPT Protective MBR, a fake partition covering the entire disk.
     let partitions = if mbr.check_signature() && mbr.entries[0].type_ != 0xEE {
+        ostd::early_println!("[block-debug] partition parse: parse MBR");
         parse_mbr(device, &mbr)
     } else {
+        ostd::early_println!("[block-debug] partition parse: parse GPT");
         parse_gpt(device)
     };
 
@@ -211,7 +219,12 @@ fn parse_gpt(device: &Arc<dyn BlockDevice>) -> Vec<Option<PartitionInfo>> {
     let mut partitions = Vec::new();
 
     // The primary GPT Header must be located in LBA 1.
+    ostd::early_println!("[block-debug] partition parse: read GPT header begin");
     let gpt = device.read_val::<GptHeader>(SECTOR_SIZE).unwrap();
+    ostd::early_println!(
+        "[block-debug] partition parse: GPT header read done, signature_ok={}",
+        gpt.check_signature(),
+    );
 
     if !gpt.check_signature() {
         return partitions;

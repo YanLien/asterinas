@@ -38,6 +38,8 @@ MULTIBOOT2_ENTRY_MAGIC  = 0x36D76289
 __linux32_boot:
     cli
     cld
+    mov al, 0xd1
+    out 0x80, al
 
     // Set the kernel call stack.
     mov esp, offset boot_stack_top
@@ -57,6 +59,8 @@ __linux32_boot:
 __linux64_boot:
     cli
     cld
+    mov al, 0xd2
+    out 0x80, al
 
     // Set the kernel call stack.
     lea rsp, [rip + boot_stack_top]
@@ -321,6 +325,9 @@ boot_stack_top:
 .code64
 
 long_mode:
+    mov al, 0xd3
+    out 0x80, al
+
     // Clear .bss section.
     mov al, 0x00
     lea rdi, [rip + __bss]

@@ -202,13 +202,17 @@ fn parse_memory_regions(boot_params: &BootParams) -> MemoryRegionArray {
 // SAFETY: The name does not collide with other symbols.
 #[unsafe(no_mangle)]
 unsafe extern "sysv64" fn __linux_boot(params_ptr: *const BootParams) -> ! {
+    crate::hvisor_debug_marker(0xd4);
     let params = unsafe { &*params_ptr };
+    crate::hvisor_debug_marker(0xd5);
     assert_eq!({ params.hdr.header }, LINUX_BOOT_HEADER_MAGIC);
+    crate::hvisor_debug_marker(0xd6);
 
     use crate::boot::{EARLY_INFO, EarlyBootInfo, start_kernel};
 
     #[cfg(feature = "cvm_guest")]
     init_cvm_guest();
+    crate::hvisor_debug_marker(0xd7);
 
     EARLY_INFO.call_once(|| EarlyBootInfo {
         bootloader_name: parse_bootloader_name(params),
@@ -218,6 +222,7 @@ unsafe extern "sysv64" fn __linux_boot(params_ptr: *const BootParams) -> ! {
         framebuffer_arg: parse_framebuffer_info(params),
         memory_regions: parse_memory_regions(params),
     });
+    crate::hvisor_debug_marker(0xd8);
 
     // SAFETY: The safety is guaranteed by the safety preconditions and the fact that we call it
     // once after setting up necessary resources.

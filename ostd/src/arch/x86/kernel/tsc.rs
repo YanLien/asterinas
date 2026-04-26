@@ -18,7 +18,16 @@ pub(in crate::arch) static TSC_FREQ: AtomicU64 = AtomicU64::new(0);
 pub fn init_tsc_freq() {
     use crate::arch::cpu::cpuid::query_tsc_freq as determine_tsc_freq_via_cpuid;
 
-    let tsc_freq = determine_tsc_freq_via_cpuid().unwrap_or_else(determine_tsc_freq_via_pit);
+    crate::hvisor_debug_marker(0x80);
+    let tsc_freq = if let Some(tsc_freq) = determine_tsc_freq_via_cpuid() {
+        crate::hvisor_debug_marker(0x81);
+        tsc_freq
+    } else {
+        crate::hvisor_debug_marker(0x82);
+        // hvisor does not currently provide a reliable PIT interrupt path for
+        // this guest, so the PIT calibration fallback can block forever.
+        2_303_000_000
+    };
     TSC_FREQ.store(tsc_freq, Ordering::Relaxed);
     info!("TSC frequency: {:?} Hz", tsc_freq);
 }

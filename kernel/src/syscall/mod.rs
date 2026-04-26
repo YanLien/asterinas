@@ -370,6 +370,16 @@ impl SyscallArgument {
 
 pub fn handle_syscall(ctx: &Context, user_ctx: &mut UserContext) {
     let syscall_frame = SyscallArgument::new_from_context(user_ctx);
+    ostd::info!(
+        "[syscall-debug] enter num={} args=[{:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x}]",
+        syscall_frame.syscall_number,
+        syscall_frame.args[0],
+        syscall_frame.args[1],
+        syscall_frame.args[2],
+        syscall_frame.args[3],
+        syscall_frame.args[4],
+        syscall_frame.args[5],
+    );
     let syscall_return = arch::syscall_dispatch(
         syscall_frame.syscall_number,
         syscall_frame.args,
@@ -380,12 +390,27 @@ pub fn handle_syscall(ctx: &Context, user_ctx: &mut UserContext) {
     match syscall_return {
         Ok(return_value) => {
             if let SyscallReturn::Return(return_value) = return_value {
+                ostd::info!(
+                    "[syscall-debug] exit num={} ret={}",
+                    syscall_frame.syscall_number,
+                    return_value
+                );
                 user_ctx.set_syscall_ret(return_value as usize);
+            } else {
+                ostd::info!(
+                    "[syscall-debug] exit num={} ret=<noreturn>",
+                    syscall_frame.syscall_number
+                );
             }
         }
         Err(err) => {
             debug!("syscall return error: {:?}", err);
             let errno = err.error() as i32;
+            ostd::info!(
+                "[syscall-debug] exit num={} errno={}",
+                syscall_frame.syscall_number,
+                errno
+            );
             user_ctx.set_syscall_ret((-errno) as usize)
         }
     }

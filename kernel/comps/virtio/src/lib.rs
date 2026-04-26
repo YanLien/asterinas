@@ -41,15 +41,32 @@ mod transport;
 
 static VIRTIO_BLOCK_MAJOR_ID: Once<MajorIdOwner> = Once::new();
 
+#[allow(unsafe_code)]
+fn hvisor_debug_marker(value: u8) {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::asm!(
+            "out dx, al",
+            in("dx") 0x80u16,
+            in("al") value,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+}
+
 #[init_component]
 fn virtio_component_init() -> Result<(), ComponentInitError> {
+    hvisor_debug_marker(0xa1);
     VIRTIO_BLOCK_MAJOR_ID.call_once(|| aster_block::allocate_major().unwrap());
+    hvisor_debug_marker(0xa2);
 
     // Find all devices and register them to the corresponding crate
     transport::init();
+    hvisor_debug_marker(0xa3);
 
     device::network::init();
     device::socket::init();
+    hvisor_debug_marker(0xa4);
 
     while let Some(mut transport) = pop_device_transport() {
         // Reset device

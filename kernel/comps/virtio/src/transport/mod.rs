@@ -254,6 +254,9 @@ bitflags::bitflags! {
 }
 
 pub fn init() {
+    ostd::early_println!("[virtio-debug] transport::init begin");
     virtio_pci_init();
+    ostd::early_println!("[virtio-debug] virtio_pci_init done");
     virtio_mmio_init();
+    ostd::early_println!("[virtio-debug] virtio_mmio_init done");
 }

@@ -125,14 +125,23 @@ impl Bio {
         &self,
         block_device: &dyn BlockDevice,
     ) -> Result<BioStatus, BioEnqueueError> {
+        ostd::early_println!(
+            "[block-debug] bio submit_and_wait begin: device={}, type={:?}, sid_range={:?}",
+            block_device.name(),
+            self.type_(),
+            self.sid_range(),
+        );
         let waiter = self.submit(block_device)?;
+        ostd::early_println!("[block-debug] bio submitted, wait begin");
         match waiter.wait() {
             Some(status) => {
+                ostd::early_println!("[block-debug] bio wait done: status={:?}", status);
                 assert!(status == BioStatus::Complete);
                 Ok(status)
             }
             None => {
                 let status = self.status();
+                ostd::early_println!("[block-debug] bio wait done: incomplete status={:?}", status);
                 assert!(status != BioStatus::Complete);
                 Ok(status)
             }

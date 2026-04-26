@@ -64,6 +64,19 @@ pub use ostd_macros::{
 
 pub use self::{error::Error, prelude::Result};
 
+#[allow(unsafe_code)]
+pub(crate) fn hvisor_debug_marker(value: u8) {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::asm!(
+            "out dx, al",
+            in("dx") 0x80u16,
+            in("al") value,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+}
+
 /// Initializes OSTD.
 ///
 /// This function represents the first phase booting up the system. It makes
@@ -77,11 +90,14 @@ pub use self::{error::Error, prelude::Result};
 // make inter-initialization-dependencies more clear and reduce usages of
 // boot stage only global variables.
 unsafe fn init() {
+    hvisor_debug_marker(0xe0);
     arch::enable_cpu_features();
+    hvisor_debug_marker(0xe1);
 
     // SAFETY: This function is called only once, before `allocator::init`
     // and after memory regions are initialized.
     unsafe { mm::frame::allocator::init_early_allocator() };
+    hvisor_debug_marker(0xe2);
 
     #[cfg(target_arch = "x86_64")]
     arch::if_tdx_enabled!({
@@ -90,33 +106,42 @@ unsafe fn init() {
     });
     #[cfg(not(target_arch = "x86_64"))]
     arch::serial::init();
+    hvisor_debug_marker(0xe3);
 
     log::init();
+    hvisor_debug_marker(0xe4);
 
     // SAFETY:
     //  1. They are only called once in the boot context of the BSP.
     //  2. The number of CPUs are available because ACPI has been initialized.
     //  3. CPU-local storage has NOT been used.
     unsafe { cpu::init_on_bsp() };
+    hvisor_debug_marker(0xe5);
 
     // SAFETY: We are on the BSP and APs are not yet started.
     let meta_pages = unsafe { mm::frame::meta::init() };
+    hvisor_debug_marker(0xe6);
     // The frame allocator should be initialized immediately after the metadata
     // is initialized. Otherwise the boot page table can't allocate frames.
     // SAFETY: This function is called only once.
     unsafe { mm::frame::allocator::init() };
+    hvisor_debug_marker(0xe7);
 
     mm::kspace::init_kernel_page_table(meta_pages);
+    hvisor_debug_marker(0xe8);
 
     // SAFETY: This function is called only once on the BSP.
     unsafe { mm::kspace::activate_kernel_page_table() };
+    hvisor_debug_marker(0xe9);
 
     sync::init();
 
     boot::init_after_heap();
+    hvisor_debug_marker(0xea);
 
     // SAFETY: This function is called only once on the BSP.
     unsafe { arch::late_init_on_bsp() };
+    hvisor_debug_marker(0xeb);
 
     #[cfg(target_arch = "x86_64")]
     arch::if_tdx_enabled!({
@@ -124,6 +149,7 @@ unsafe fn init() {
     });
 
     smp::init();
+    hvisor_debug_marker(0xec);
 
     // SAFETY:
     // 1. The kernel page table is activated on the BSP.
@@ -134,6 +160,7 @@ unsafe fn init() {
     arch::irq::enable_local();
 
     invoke_ffi_init_funcs();
+    hvisor_debug_marker(0xed);
 
     IN_BOOTSTRAP_CONTEXT.store(false, Ordering::Relaxed);
 }

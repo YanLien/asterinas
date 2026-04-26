@@ -41,5 +41,11 @@ pub fn sys_write(
     if write_len > 0 {
         fs::vfs::notify::on_modify(&file);
     }
+    ostd::info!(
+        "[syscall-debug] write fd={} requested={} ret={}",
+        raw_fd,
+        user_buf_len,
+        write_len
+    );
     Ok(SyscallReturn::Return(write_len as _))
 }

@@ -29,6 +29,19 @@ extern crate getset;
 #[macro_use]
 extern crate ostd_pod;
 
+#[allow(unsafe_code)]
+fn hvisor_debug_marker(value: u8) {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::asm!(
+            "out dx, al",
+            in("dx") 0x80u16,
+            in("al") value,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+}
+
 // Set this crate's log prefix for `ostd::log`.
 macro_rules! __log_prefix {
     () => {
@@ -67,5 +80,6 @@ mod vm;
 #[controlled]
 #[ostd::main]
 fn main() {
+    hvisor_debug_marker(0xb0);
     init::main();
 }

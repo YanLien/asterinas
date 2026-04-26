@@ -162,14 +162,29 @@ fn init() -> Result<(), ComponentInitError> {
 
 #[init_component(process)]
 fn init_in_first_process() -> Result<(), component::ComponentInitError> {
+    ostd::early_println!("[block-debug] process init begin");
     let devices = collect_all();
+    ostd::early_println!("[block-debug] collected {} block device(s)", devices.len());
     for device in devices {
+        ostd::early_println!(
+            "[block-debug] parse partitions begin: name={}, id={:?}, meta={:?}",
+            device.name(),
+            device.id(),
+            device.metadata(),
+        );
         let Some(partition_info) = partition::parse(&device) else {
+            ostd::early_println!("[block-debug] no partition info: name={}", device.name());
             continue;
         };
 
+        ostd::early_println!(
+            "[block-debug] set partitions: name={}, entries={}",
+            device.name(),
+            partition_info.len(),
+        );
         device.set_partitions(partition_info);
     }
 
+    ostd::early_println!("[block-debug] process init done");
     Ok(())
 }

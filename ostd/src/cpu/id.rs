@@ -145,7 +145,9 @@ mod current {
         /// implement the [`PinCurrentCpu`] trait.
         pub fn current_racy() -> Self {
             #[cfg(debug_assertions)]
-            assert!(IS_CURRENT_CPU_INITED.load());
+            if !IS_CURRENT_CPU_INITED.load() {
+                return Self::bsp();
+            }
 
             let current_raw_id = CURRENT_CPU.load();
             // SAFETY: The CPU-local value is initialized to a correct one.

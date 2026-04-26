@@ -16,10 +16,13 @@ pub mod multiplex;
 pub static VIRTIO_MMIO_DRIVER: Once<Arc<VirtioMmioDriver>> = Once::new();
 
 pub fn virtio_mmio_init() {
+    ostd::early_println!("[virtio-debug] virtio_mmio_init begin");
     bus::init();
+    ostd::early_println!("[virtio-debug] mmio bus init done");
 
     VIRTIO_MMIO_DRIVER.call_once(|| Arc::new(VirtioMmioDriver::new()));
     MMIO_BUS
         .lock()
         .register_driver(VIRTIO_MMIO_DRIVER.get().unwrap().clone());
+    ostd::early_println!("[virtio-debug] mmio driver registered");
 }
