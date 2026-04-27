@@ -18,15 +18,19 @@ pub fn sys_getrandom(buf: Vaddr, count: usize, flags: u32, ctx: &Context) -> Res
         );
     }
 
-    // Currently we don't really generate true randomness by collecting environment noise, so we
-    // will never block.
-    // TODO: Support `GRND_NONBLOCK` and `GRND_INSECURE`.
+    // The RNG is initialized during boot with hardware entropy and continuously
+    // reseeded from environmental noise (TSC jitter and hardware RNG). It is
+    // always ready by the time any userspace program runs. Both /dev/random and
+    // /dev/urandom are non-blocking, following the Linux 5.6+ approach.
+    // GRND_NONBLOCK has no effect. GRND_INSECURE behaves the same as the
+    // default (urandom) path.
 
     let user_space = ctx.user_space();
     let mut writer = user_space.writer(buf, count)?;
     let read_len = if flags.contains(GetRandomFlags::GRND_RANDOM) {
         device::getrandom(&mut writer)?
     } else {
+        // Default, GRND_NONBLOCK, and GRND_INSECURE all use the urandom path.
         device::geturandom(&mut writer)?
     };
     Ok(SyscallReturn::Return(read_len as isize))

@@ -52,6 +52,7 @@ fn init_on_each_cpu() {
     crate::process::init_on_each_cpu();
     crate::fs::init_on_each_cpu();
     crate::time::init_on_each_cpu();
+    crate::util::random::init_on_each_cpu();
 }
 
 fn ap_init() {

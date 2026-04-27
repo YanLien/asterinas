@@ -36,7 +36,9 @@ pub fn geturandom(writer: &mut VmWriter) -> Result<usize> {
     Ok(written_bytes)
 }
 
-// TODO: Support true randomness by collecting environment noise.
+/// `/dev/random` uses the same enhanced RNG as `/dev/urandom`, which is
+/// continuously reseeded from environmental noise (TSC jitter and hardware RNG).
+/// Both devices are non-blocking, following the Linux 5.6+ approach.
 pub use geturandom as getrandom;
 
 #[expect(dead_code)]
