@@ -873,6 +873,25 @@ impl Inode for RamInode {
         Ok(new_inode)
     }
 
+    fn create_tmpfile(&self, mode: InodeMode) -> Result<Arc<dyn Inode>> {
+        if self.typ != InodeType::Dir {
+            return_errno_with_message!(Errno::ENOTDIR, "self is not dir");
+        }
+
+        let fs = self.fs.upgrade().unwrap();
+        let new_inode = RamInode::new_file(&fs, mode, Uid::new_root(), Gid::new_root());
+
+        // Tmpfiles start with nlinks=0 since they have no directory entry.
+        new_inode.metadata.lock().nlinks = 0;
+
+        let now = now();
+        let mut inode_meta = self.metadata.lock();
+        inode_meta.set_mtime(now);
+        inode_meta.set_ctime(now);
+
+        Ok(new_inode)
+    }
+
     fn readdir_at(&self, offset: usize, visitor: &mut dyn DirentVisitor) -> Result<usize> {
         if self.typ != InodeType::Dir {
             return_errno_with_message!(Errno::ENOTDIR, "self is not dir");

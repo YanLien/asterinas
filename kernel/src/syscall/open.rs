@@ -82,6 +82,10 @@ fn do_open(
 ) -> Result<Arc<dyn FileLike>> {
     let open_args = OpenArgs::from_flags_and_mode(flags, mode)?;
 
+    if open_args.is_tmpfile() {
+        return do_open_tmpfile(path_resolver, fs_path, &open_args);
+    }
+
     let lookup_res = if open_args.follow_tail_link() {
         path_resolver.lookup_unresolved(fs_path)?
     } else {
@@ -118,4 +122,26 @@ fn do_open(
     };
 
     Ok(file_handle)
+}
+
+fn do_open_tmpfile(
+    path_resolver: &PathResolver,
+    fs_path: &FsPath,
+    open_args: &OpenArgs,
+) -> Result<Arc<dyn FileLike>> {
+    let dir_path = path_resolver.lookup(fs_path)?;
+    if dir_path.type_() != InodeType::Dir {
+        return_errno_with_message!(
+            Errno::ENOTDIR,
+            "O_TMPFILE requires the path to be a directory"
+        );
+    }
+
+    let tmpfile_path = dir_path.create_tmpfile(open_args.inode_mode)?;
+
+    Ok(Arc::new(InodeHandle::new_unchecked_access(
+        tmpfile_path,
+        open_args.access_mode,
+        open_args.status_flags,
+    )?))
 }
