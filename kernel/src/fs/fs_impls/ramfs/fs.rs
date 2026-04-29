@@ -25,7 +25,10 @@ use crate::{
         utils::{CStr256, DirentVisitor},
         vfs::{
             file_system::{FileSystem, FsEventSubscriberStats, SuperBlock},
-            inode::{Extension, FallocMode, Inode, InodeIo, Metadata, MknodType, SymbolicLink},
+            inode::{
+                Extension, FallocMode, HardLinkability, Inode, InodeIo, Metadata, MknodType,
+                SymbolicLink,
+            },
             page_cache::{CachePage, PageCache, PageCacheBackend},
             path::{is_dot, is_dot_or_dotdot, is_dotdot},
             registry::{FsCreationCtx, FsProperties, FsType},
@@ -260,6 +263,7 @@ struct InodeMeta {
     ctime: Duration,
     mode: InodeMode,
     nlinks: usize,
+    hard_linkability: HardLinkability,
     uid: Uid,
     gid: Gid,
 }
@@ -275,6 +279,7 @@ impl InodeMeta {
             ctime: now,
             mode,
             nlinks: 1,
+            hard_linkability: HardLinkability::Linkable,
             uid,
             gid,
         }
@@ -290,6 +295,7 @@ impl InodeMeta {
             ctime: now,
             mode,
             nlinks: NUM_SPECIAL_ENTRIES,
+            hard_linkability: HardLinkability::Linkable,
             uid,
             gid,
         }
@@ -336,6 +342,14 @@ impl InodeMeta {
     pub fn dec_nlinks(&mut self) {
         debug_assert!(self.nlinks > 0);
         self.nlinks -= 1;
+    }
+
+    pub fn set_hard_linkability(&mut self, hard_linkability: HardLinkability) {
+        self.hard_linkability = hard_linkability;
+    }
+
+    pub fn hard_linkability(&self) -> HardLinkability {
+        self.hard_linkability
     }
 }
 
@@ -873,6 +887,32 @@ impl Inode for RamInode {
         Ok(new_inode)
     }
 
+    fn create_tmpfile(
+        &self,
+        mode: InodeMode,
+        hard_linkability: HardLinkability,
+    ) -> Result<Arc<dyn Inode>> {
+        if self.typ != InodeType::Dir {
+            return_errno_with_message!(Errno::ENOTDIR, "self is not dir");
+        }
+
+        let fs = self.fs.upgrade().unwrap();
+        let new_inode = RamInode::new_file(&fs, mode, Uid::new_root(), Gid::new_root());
+
+        {
+            let mut new_inode_meta = new_inode.metadata.lock();
+            new_inode_meta.nlinks = 0;
+            new_inode_meta.set_hard_linkability(hard_linkability);
+        }
+
+        let now = now();
+        let mut inode_meta = self.metadata.lock();
+        inode_meta.set_mtime(now);
+        inode_meta.set_ctime(now);
+
+        Ok(new_inode)
+    }
+
     fn readdir_at(&self, offset: usize, visitor: &mut dyn DirentVisitor) -> Result<usize> {
         if self.typ != InodeType::Dir {
             return_errno_with_message!(Errno::ENOTDIR, "self is not dir");
@@ -903,6 +943,9 @@ impl Inode for RamInode {
             .ok_or(Error::new(Errno::EXDEV))?;
         if old.typ == InodeType::Dir {
             return_errno_with_message!(Errno::EPERM, "old is a dir");
+        }
+        if old.metadata.lock().hard_linkability() == HardLinkability::Unlinkable {
+            return_errno_with_message!(Errno::ENOENT, "tmpfile is not linkable");
         }
 
         let mut self_dir = self.inner.as_direntry().unwrap().write();

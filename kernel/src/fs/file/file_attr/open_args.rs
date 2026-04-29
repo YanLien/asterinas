@@ -19,7 +19,31 @@ impl OpenArgs {
     pub fn from_flags_and_mode(flags: u32, inode_mode: InodeMode) -> Result<Self> {
         let creation_flags = CreationFlags::from_bits_truncate(flags);
         let status_flags = StatusFlags::from_bits_truncate(flags);
-        if creation_flags.contains(CreationFlags::O_CREAT)
+        let access_mode = AccessMode::from_u32(flags)?;
+
+        if creation_flags.contains(CreationFlags::O_TMPFILE) {
+            if !creation_flags.contains(CreationFlags::O_DIRECTORY) {
+                return_errno_with_message!(Errno::EINVAL, "O_TMPFILE requires O_DIRECTORY");
+            }
+            if !access_mode.is_writable() {
+                return_errno_with_message!(Errno::EINVAL, "O_TMPFILE requires O_RDWR or O_WRONLY");
+            }
+            if creation_flags.contains(CreationFlags::O_CREAT) {
+                return_errno_with_message!(
+                    Errno::EINVAL,
+                    "O_TMPFILE and O_CREAT are mutually exclusive"
+                );
+            }
+            // O_EXCL with O_TMPFILE is allowed by Linux, but it prevents
+            // the tmpfile from being linked later by linkat(..., AT_EMPTY_PATH).
+            // Reference: <https://man7.org/linux/man-pages/man2/open.2.html>.
+            if status_flags.contains(StatusFlags::O_PATH) {
+                return_errno_with_message!(
+                    Errno::EINVAL,
+                    "O_TMPFILE and O_PATH are mutually exclusive"
+                );
+            }
+        } else if creation_flags.contains(CreationFlags::O_CREAT)
             && creation_flags.contains(CreationFlags::O_DIRECTORY)
         {
             return_errno_with_message!(
@@ -27,7 +51,7 @@ impl OpenArgs {
                 "O_CREAT and O_DIRECTORY cannot be specified together"
             );
         }
-        let access_mode = AccessMode::from_u32(flags)?;
+
         Ok(Self {
             creation_flags,
             status_flags,
@@ -51,5 +75,10 @@ impl OpenArgs {
         !(self.creation_flags.contains(CreationFlags::O_NOFOLLOW)
             || self.creation_flags.contains(CreationFlags::O_CREAT)
                 && self.creation_flags.contains(CreationFlags::O_EXCL))
+    }
+
+    /// Returns whether this is an O_TMPFILE open request.
+    pub fn is_tmpfile(&self) -> bool {
+        self.creation_flags.contains(CreationFlags::O_TMPFILE)
     }
 }

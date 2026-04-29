@@ -2,6 +2,7 @@
 
 //! Form file paths within and across FSes with dentries and mount points.
 
+use alloc::format;
 use core::time::Duration;
 
 pub(in crate::fs) use dentry::Dentry;
@@ -18,7 +19,7 @@ use crate::{
         },
         vfs::{
             file_system::{FileSystem, FsFlags},
-            inode::{Inode, Metadata, MknodType},
+            inode::{HardLinkability, Inode, Metadata, MknodType},
             xattr::{XattrName, XattrNamespace, XattrSetFlags},
         },
     },
@@ -70,6 +71,29 @@ impl Path {
             .as_dir_dentry_or_err()?
             .create(name, type_, mode)?;
         Ok(Self::new(self.mount.clone(), new_child_dentry))
+    }
+
+    /// Creates an unnamed temporary file in the directory represented by this path.
+    ///
+    /// The returned inode has no directory entry and is invisible to `readdir`.
+    /// It can get a hard link later via `linkat` with `AT_EMPTY_PATH` only if
+    /// it is created as hard-linkable.
+    pub fn create_tmpfile(
+        &self,
+        mode: InodeMode,
+        hard_linkability: HardLinkability,
+    ) -> Result<Self> {
+        if self
+            .inode()
+            .check_permission(Permission::MAY_WRITE)
+            .is_err()
+        {
+            return_errno!(Errno::EACCES);
+        }
+        let tmp_inode = self.inode().create_tmpfile(mode, hard_linkability)?;
+        Ok(Self::new_pseudo(self.mount.clone(), tmp_inode, |inode| {
+            format!("/tmpfile:{}", inode.ino())
+        }))
     }
 
     /// Creates a new pseudo `Path`.
