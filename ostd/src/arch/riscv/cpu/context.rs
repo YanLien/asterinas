@@ -26,6 +26,10 @@ use crate::{
 pub struct UserContext {
     user_context: RawUserContext,
     exception: Option<CpuException>,
+    /// The `scause` value captured at the most recent trap.
+    scause: usize,
+    /// The `stval` value captured at the most recent trap.
+    stval: usize,
 }
 
 /// General registers.
@@ -182,6 +186,9 @@ impl UserContextApiInternal for UserContext {
             self.user_context.run();
 
             let scause = riscv::register::scause::read();
+            let stval = riscv::register::stval::read();
+            self.scause = scause.bits();
+            self.stval = stval;
             let Ok(cause) = Trap::<Interrupt, Exception>::try_from(scause.cause()) else {
                 match scause.cause() {
                     Trap::Interrupt(i) => {
@@ -205,7 +212,6 @@ impl UserContextApiInternal for UserContext {
                     break ReturnReason::UserSyscall;
                 }
                 Trap::Exception(raw_exception) => {
-                    let stval = riscv::register::stval::read();
                     crate::arch::irq::enable_local();
 
                     let exception = CpuException::new(raw_exception, stval);
@@ -231,11 +237,11 @@ impl UserContextApiInternal for UserContext {
 
 impl UserContextApi for UserContext {
     fn trap_number(&self) -> usize {
-        todo!()
+        self.scause
     }
 
     fn trap_error_code(&self) -> usize {
-        todo!()
+        self.stval
     }
 
     fn instruction_pointer(&self) -> usize {
@@ -464,4 +470,52 @@ unsafe extern "C" {
     unsafe fn load_fpu_context_d(ctx: *const DFpuContext);
     unsafe fn save_fpu_context_q(ctx: *mut QFpuContext);
     unsafe fn load_fpu_context_q(ctx: *const QFpuContext);
+}
+
+// ---------------------------------------------------------------------------
+// Kernel FPU access (kernel_fpu_begin / kernel_fpu_end)
+// ---------------------------------------------------------------------------
+
+crate::cpu_local_cell! {
+    /// Per-CPU buffer for saving FPU state during kernel FPU use.
+    static KERNEL_FPU_CONTEXT: FpuContext = FpuContext::None;
+}
+
+/// Enables FPU access for kernel code by saving the current FPU state to a
+/// per-CPU buffer and setting `SSTATUS.FS = Initial`.
+///
+/// Preemption is disabled until [`kernel_fpu_end`] is called. The returned
+/// guard must be passed to [`kernel_fpu_end`] to restore state.
+///
+/// # Example
+/// ```no_run
+/// let guard = kernel_fpu_begin();
+/// // ... use FPU instructions safely ...
+/// kernel_fpu_end(guard);
+/// ```
+pub fn kernel_fpu_begin() -> crate::task::DisabledPreemptGuard {
+    let guard = crate::task::disable_preempt();
+    // SAFETY: preemption is disabled, so we stay on the same CPU.
+    let fpu = unsafe { &mut *KERNEL_FPU_CONTEXT.as_mut_ptr() };
+    if matches!(*fpu, FpuContext::None) {
+        *fpu = FpuContext::new();
+    }
+    fpu.save();
+    // SAFETY: enabling FPU access in S-mode is safe.
+    unsafe {
+        riscv::register::sstatus::set_fs(riscv::register::sstatus::FS::Initial);
+    }
+    guard
+}
+
+/// Disables FPU access for kernel code and restores the saved FPU state.
+pub fn kernel_fpu_end(guard: crate::task::DisabledPreemptGuard) {
+    // SAFETY: disabling FPU access in S-mode is safe.
+    unsafe {
+        riscv::register::sstatus::set_fs(riscv::register::sstatus::FS::Off);
+    }
+    // SAFETY: preemption is still disabled (guard not yet dropped).
+    let fpu = unsafe { &mut *KERNEL_FPU_CONTEXT.as_mut_ptr() };
+    fpu.load();
+    drop(guard);
 }
