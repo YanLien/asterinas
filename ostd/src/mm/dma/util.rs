@@ -277,6 +277,12 @@ unsafe fn dma_remap(pa_range: &Range<Paddr>) -> Option<Daddr> {
 
     let _irq_guard = irq::disable_local();
 
+    // x86 uses a global IOMMU behind which all DMA-capable PCI devices sit, so
+    // distinct device addresses are safe. RISC-V's IOMMU is per-device: only
+    // devices with an `iommus` DT property are translated, while others bypass
+    // it and DMA straight to physical addresses. Identity device addresses
+    // (daddr == paddr) are therefore correct for both translated and bypass
+    // devices, whereas distinct addresses would corrupt bypass devices.
     #[cfg(target_arch = "x86_64")]
     let daddr = allocator::daddr_allocator(&_irq_guard)
         .alloc(pa_range.len())

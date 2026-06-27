@@ -70,12 +70,22 @@ else
 fi
 
 if [ "$1" = "riscv" ]; then
+    # Enable the RISC-V IOMMU (platform-bus form) to exercise the IOMMU driver.
+    # `iommu-sys=on` adds a `riscv,iommu` node to the device tree that all
+    # virtio-mmio devices reference via their `iommus` property. At reset the
+    # IOMMU blocks all DMA (off=on) until the OS programs the DDTP, so the
+    # kernel must initialize the IOMMU before any DMA occurs.
+    if [ "${IOMMU:-off}" = "on" ]; then
+        MACHINE_OPT="-machine virt,iommu-sys=on"
+    else
+        MACHINE_OPT="-machine virt"
+    fi
     # NOTE: The `/etc/profile.d/init.sh` assumes that `ext2.img` appears as the first block device (`/dev/vda`).
     # The ordering below ensures `x1` (ext2.img) is discovered before `x0`, maintaining this assumption.
     # TODO: Once UUID-based mounting is implemented, this strict ordering will no longer be required.
     QEMU_ARGS="\
         -cpu rv64,svpbmt=true,zkr=true \
-        -machine virt \
+        $MACHINE_OPT \
         -m ${MEM:-8G} \
         -smp ${SMP:-1} \
         --no-reboot \
