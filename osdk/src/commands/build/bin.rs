@@ -155,6 +155,48 @@ pub fn make_elf_for_qemu(elf: AsterBin) -> AsterBin {
     elf
 }
 
+/// Converts the kernel ELF into a flat raw binary for QEMU direct boot.
+///
+/// QEMU's `-kernel <elf>` does not follow the AArch64 boot protocol (it leaves
+/// `x0 = 0`, so the device tree is not passed), whereas `-kernel <raw-binary>`
+/// loads the image as a raw arm64 kernel and passes the device tree address in
+/// `x0`. So for AArch64 we ship a raw binary to QEMU.
+pub fn make_raw_for_qemu(install_dir: impl AsRef<Path>, elf: AsterBin) -> AsterBin {
+    let raw_name = elf
+        .path()
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string()
+        + ".raw.bin";
+    let raw_path = install_dir.as_ref().join(raw_name);
+
+    let arch = elf.arch();
+    let typ = elf.typ().clone();
+    let version = elf.version().clone();
+    let stripped = elf.stripped();
+    let elf_path = elf.path().clone();
+
+    let status = new_command_checked_exists("rust-objcopy")
+        .arg("-O")
+        .arg("binary")
+        .arg(elf_path.as_os_str())
+        .arg(raw_path.as_os_str())
+        .status();
+    match status {
+        Ok(status) if status.success() => {}
+        Ok(_) => panic!("Failed to convert the kernel ELF into a raw binary"),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => panic!(
+            "`rust-objcopy` command not found. Please install `cargo-binutils` \
+             (`cargo install cargo-binutils`) and rerun."
+        ),
+        Err(err) => panic!("Converting the kernel ELF failed, error: {:#?}", err),
+    }
+
+    AsterBin::new(&raw_path, arch, typ, version, stripped)
+}
+
 fn install_setup_with_arch(
     install_dir: impl AsRef<Path>,
     target_dir: impl AsRef<Path>,

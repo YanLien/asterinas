@@ -11,7 +11,7 @@ use std::{
     time::SystemTime,
 };
 
-use bin::{make_elf_for_qemu, make_install_bzimage, make_stripped_boot_elf};
+use bin::{make_elf_for_qemu, make_install_bzimage, make_raw_for_qemu, make_stripped_boot_elf};
 
 use super::util::{COMMON_CARGO_ARGS, DEFAULT_TARGET_RELPATH, cargo, profile_name_adapter};
 use crate::{
@@ -193,6 +193,11 @@ pub fn do_cached_build(
                     build.linux_x86_legacy_boot,
                     config.build.encoding.clone(),
                 ),
+                // QEMU passes the device tree in x0 only for a raw arm64 kernel
+                // image, not for an ELF, so ship a raw binary for AArch64.
+                _ if boot_elf.arch() == Arch::Aarch64 => {
+                    make_raw_for_qemu(&osdk_output_directory, boot_elf)
+                }
                 _ => make_elf_for_qemu(boot_elf),
             };
             bundle.consume_aster_bin(aster_bin);

@@ -87,6 +87,12 @@ qemu.args = """\
     -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
     -device virtio-keyboard-pci \
     -device virtio-serial \
-    -device virtconsole,chardev=mux \
+    -device virtconsole,chardev:mux \
     -rtc base=utc
 """
+
+[scheme."aarch64"]
+supported_archs = ["aarch64"]
+boot.method = "qemu-direct"
+build.strip_elf = false
+qemu.args = "$(./tools/qemu_args.sh aarch64)"

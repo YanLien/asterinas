@@ -37,6 +37,11 @@ impl PciDriver for VirtioPciDriver {
         device: PciCommonDevice,
     ) -> Result<Arc<dyn PciDevice>, (BusProbeError, PciCommonDevice)> {
         const VIRTIO_DEVICE_VENDOR_ID: u16 = 0x1af4;
+        ostd::early_println!(
+            "virtio-pci probe: vendor={:#x} device={:#x}",
+            device.device_id().vendor_id,
+            device.device_id().device_id
+        );
         if device.device_id().vendor_id != VIRTIO_DEVICE_VENDOR_ID {
             return Err((BusProbeError::DeviceNotMatch, device));
         }

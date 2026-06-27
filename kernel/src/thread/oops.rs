@@ -75,6 +75,16 @@ static OOPS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[ostd::panic_handler]
 fn panic_handler(info: &core::panic::PanicInfo) -> ! {
+    // Debugging aid: print the panic once via the early console, since the log
+    // subsystem may not be initialized yet when an early-init panic occurs.
+    {
+        use core::sync::atomic::{AtomicBool, Ordering};
+        static PANIC_MSG_PRINTED: AtomicBool = AtomicBool::new(false);
+        if !PANIC_MSG_PRINTED.swap(true, Ordering::SeqCst) {
+            ostd::early_println!("{}", info);
+        }
+    }
+
     let message = info.message();
 
     if let Some(thread) = Thread::current() {
